@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -13,7 +14,7 @@ import {
   View
 } from 'react-native';
 
-// นำเข้าข้อมูล JSON จาก constants (ป้องกันกรณีอาเรย์ว่างด้วย || [])
+// นำเข้าข้อมูล JSON จาก constants
 import rawFaqData from '@/constants/faqData.json';
 
 interface CleanFAQItem {
@@ -51,7 +52,45 @@ export default function HomeScreen() {
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  // สร้างแอนิเมชันลอยขึ้นลงสำหรับมาสคอต
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: -6, // ขยับขึ้นไป 6 พิกเซล
+          duration: 1200,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0, // กลับมาที่เดิม
+          duration: 1200,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ])
+    ).start();
+  }, [floatAnim]);
+
+  const [chatHistory, setChatHistory] = useState<{ [key: string]: Message[] }>({
+    home: [],
+    search: [],
+    paper: [],
+    citation: [],
+  });
+
+  const messages = chatHistory[activeTab] || [];
+
+  const updateCurrentMessages = (newMsgs: Message[] | ((prev: Message[]) => Message[])) => {
+    setChatHistory((prev) => {
+      const currentMsgs = prev[activeTab] || [];
+      const updated = typeof newMsgs === 'function' ? newMsgs(currentMsgs) : newMsgs;
+      return {
+        ...prev,
+        [activeTab]: updated,
+      };
+    });
+  };
 
   const sidebarWidth = isPinned || isHovered ? 220 : 80;
 
@@ -135,33 +174,42 @@ export default function HomeScreen() {
     };
   };
 
-  const handleNewChatCategory = (categoryQuery: string, tabName: string) => {
+  const handleTabSwitch = (tabName: string, defaultQuery?: string) => {
     setActiveTab(tabName);
     setInputText('');
-    setIsSearching(true);
 
-    const currentTime = getCurrentTime();
-    const userMsg: Message = {
-      id: `${Date.now()}-user`,
-      text: categoryQuery,
-      sender: 'user',
-      time: currentTime,
-    };
-
-    setMessages([userMsg]);
-
-    setTimeout(() => {
-      const result = findAnswer(categoryQuery);
-      const systemMsg: Message = {
-        id: `${Date.now()}-system`,
-        text: result.answer,
-        sender: 'system',
-        time: getCurrentTime(),
-        note: result.note,
+    const existingMsgs = chatHistory[tabName] || [];
+    if (existingMsgs.length === 0 && defaultQuery) {
+      setIsSearching(true);
+      const currentTime = getCurrentTime();
+      const userMsg: Message = {
+        id: `${Date.now()}-user`,
+        text: defaultQuery,
+        sender: 'user',
+        time: currentTime,
       };
-      setMessages((prev) => [...prev, systemMsg]);
-      setIsSearching(false);
-    }, 300);
+
+      setChatHistory((prev) => ({
+        ...prev,
+        [tabName]: [userMsg],
+      }));
+
+      setTimeout(() => {
+        const result = findAnswer(defaultQuery);
+        const systemMsg: Message = {
+          id: `${Date.now()}-system`,
+          text: result.answer,
+          sender: 'system',
+          time: getCurrentTime(),
+          note: result.note,
+        };
+        setChatHistory((prev) => ({
+          ...prev,
+          [tabName]: [...(prev[tabName] || [userMsg]), systemMsg],
+        }));
+        setIsSearching(false);
+      }, 300);
+    }
   };
 
   const handleSend = (textToSend?: string) => {
@@ -175,7 +223,7 @@ export default function HomeScreen() {
       time: getCurrentTime(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    updateCurrentMessages((prev) => [...prev, userMsg]);
     if (!textToSend) setInputText('');
     setIsSearching(true);
 
@@ -188,13 +236,18 @@ export default function HomeScreen() {
         time: getCurrentTime(),
         note: result.note,
       };
-      setMessages((prev) => [...prev, systemMsg]);
+      updateCurrentMessages((prev) => [...prev, systemMsg]);
       setIsSearching(false);
     }, 300);
   };
 
   const handleReset = () => {
-    setMessages([]);
+    setChatHistory({
+      home: [],
+      search: [],
+      paper: [],
+      citation: [],
+    });
     setInputText('');
     setActiveTab('home');
   };
@@ -214,7 +267,7 @@ export default function HomeScreen() {
         >
           <View style={styles.sidebarTop}>
             <View style={styles.logoAndPinContainer}>
-              <TouchableOpacity style={styles.logoBtn} onPress={handleReset}>
+              <TouchableOpacity style={styles.logoBtn} onPress={() => handleTabSwitch('home')}>
                 <View style={styles.logoCircle}>
                   <Image
                     source={require('../../assets/images/Logo.png')}
@@ -236,7 +289,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={[styles.menuRowBtn, activeTab === 'home' && styles.menuRowActive]}
-              onPress={handleReset}
+              onPress={() => handleTabSwitch('home')}
             >
               <Text style={styles.iconSymbol}>🏠</Text>
               {(isHovered || isPinned) && <Text style={styles.menuLabel}>หน้าแรก</Text>}
@@ -244,7 +297,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={[styles.menuRowBtn, activeTab === 'search' && styles.menuRowActive]}
-              onPress={() => handleNewChatCategory('การตั้งค่าหน้ากระดาษ', 'search')}
+              onPress={() => handleTabSwitch('search', 'การตั้งค่าหน้ากระดาษ')}
             >
               <Text style={styles.iconSymbol}>🔍</Text>
               {(isHovered || isPinned) && <Text style={styles.menuLabel}>ตั้งค่าหน้ากระดาษ</Text>}
@@ -252,7 +305,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={[styles.menuRowBtn, activeTab === 'paper' && styles.menuRowActive]}
-              onPress={() => handleNewChatCategory('ใช้กระดาษอะไร', 'paper')}
+              onPress={() => handleTabSwitch('paper', 'ใช้กระดาษอะไร')}
             >
               <Text style={styles.iconSymbol}>📄</Text>
               {(isHovered || isPinned) && <Text style={styles.menuLabel}>ชนิดกระดาษ</Text>}
@@ -260,7 +313,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={[styles.menuRowBtn, activeTab === 'citation' && styles.menuRowActive]}
-              onPress={() => handleNewChatCategory('การอ้างอิง', 'citation')}
+              onPress={() => handleTabSwitch('citation', 'การอ้างอิง')}
             >
               <Text style={styles.iconSymbol}>📚</Text>
               {(isHovered || isPinned) && <Text style={styles.menuLabel}>การอ้างอิง</Text>}
@@ -282,7 +335,7 @@ export default function HomeScreen() {
               <Text style={styles.guideBadgeTitle}>คู่มือวิทยานิพนธ์ฉบับทางการ</Text>
             </View>
 
-            <Text style={styles.brandCenter}>ระบบสืบค้นข้อมูลวิทยานิพนธ์</Text>
+            <Text style={styles.brandCenter}>LeO - ระบบสืบค้นข้อมูล</Text>
 
             <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
               <Text style={styles.resetBtnText}>เริ่มค้นหาใหม่ ↺</Text>
@@ -301,18 +354,20 @@ export default function HomeScreen() {
                 </Text>
                 <Text style={styles.heroSubtitle}>การจัดทำวิทยานิพนธ์และงานวิจัย</Text>
 
-                {/* ดึงรูปมาสคอตจาก assets/images/mascot.png มาแสดง */}
                 <View style={styles.handbookGraphic}>
-                  <View style={styles.mascotCircleWrapper}>
+                  {/* กรอบวงกลมพร้อมแอนิเมชันมาสคอตขยับขึ้นลง */}
+                  <Animated.View
+                    style={[
+                      styles.mascotCircleWrapper,
+                      { transform: [{ translateY: floatAnim }] },
+                    ]}
+                  >
                     <Image
-                      source={require('../../assets/images/mascot.png')}
+                      source={require('../../assets/images/mascotlogo.png')}
                       style={styles.mascotImage}
                       resizeMode="contain"
                     />
-                  </View>
-                  <Text style={styles.databaseSubText}>
-                    ฐานข้อมูลระเบียบและข้อกำหนดมาตรฐานทั้งหมด {faqList.length} รายการ
-                  </Text>
+                  </Animated.View>
                 </View>
               </View>
             ) : (
@@ -333,7 +388,7 @@ export default function HomeScreen() {
                         </Text>
                         {item.note && (
                           <View style={styles.refBox}>
-                            <Text style={styles.refTitle}>📌 แหล่งอ้างอิงในคู่มือ:</Text>
+                            <Text style={styles.refTitle}>📌 แหล่งอ้างอิง:</Text>
                             <Text style={styles.refTxt}>{item.note}</Text>
                           </View>
                         )}
@@ -622,11 +677,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
   },
-  databaseSubText: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '500',
-  },
   chatListContent: {
     paddingVertical: 16,
     gap: 14,
@@ -671,20 +721,23 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   refBox: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 4,
+    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   refTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#2563EB',
-    marginBottom: 2,
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#94A3B8',
   },
   refTxt: {
-    fontSize: 12,
-    color: '#475569',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#2563EB',
   },
   timeLabel: {
     fontSize: 10,
