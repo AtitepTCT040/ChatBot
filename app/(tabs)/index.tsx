@@ -412,16 +412,6 @@ export default function HomeScreen() {
             {/* ================= 3. FLOATING SEARCH CARD ================= */}
             <View style={styles.bottomCardWrapper}>
               <View style={styles.promptFloatingCard}>
-                <View style={styles.bannerRow}>
-                  <View style={styles.bannerLeft}>
-                    <Text style={styles.bannerIcon}>ℹ️</Text>
-                    <Text style={styles.bannerText}>ฐานข้อมูลคู่มือทางการ ({faqList.length} ข้อกำหนด)</Text>
-                  </View>
-                  <TouchableOpacity style={styles.clearMiniBtn} onPress={handleReset}>
-                    <Text style={styles.clearMiniText}>ล้างการค้นหา</Text>
-                  </TouchableOpacity>
-                </View>
-
                 <View style={styles.inputAreaRow}>
                   <Text style={styles.inputSearchIcon}>🔍</Text>
                   <TextInput
@@ -780,38 +770,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 18,
     elevation: 4,
-  },
-  bannerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  bannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  bannerIcon: {
-    fontSize: 13,
-  },
-  bannerText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  clearMiniBtn: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  clearMiniText: {
-    color: '#475569',
-    fontSize: 11,
-    fontWeight: '600',
   },
   inputAreaRow: {
     flexDirection: 'row',
